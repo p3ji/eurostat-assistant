@@ -32,6 +32,22 @@ Suggested entry shape:
 
 ## Unreleased
 
+### `12da023` — Audit answer prose for ungrounded numerical claims and tool truncation
+
+- **Changed:** Added a deterministic verification layer (`backend/app/agent_verification.py`) that audits
+  the agent's text response against the returned Eurostat observations. If the prose mentions ungrounded
+  statistical figures not present in the dataset, the structured result attaches an explanatory warning
+  and calibrates high confidence down to medium. When model-visible tool output is truncated at the
+  10,000-character budget, the audit flags partial context to warn against truncated-row hallucinations.
+  Updated `skill/SKILL.md` and `agent_model.py` with explicit guidance against ungrounded prose numbers.
+- **Reasoning:** In statistical question answering, generative models that write numbers freehand
+  frequently hallucinate, miscalculate arithmetic deltas, or extrapolate across truncated observations.
+  Soft prompt rules ("do not transcribe") are non-deterministic; this software guardrail enforces
+  grounding against authoritative dataset observations before answers reach the client.
+- **Validation/impact:** Added unit tests for numerical claim extraction, metadata filtering (ignoring
+  years, ordinals, dataset codes), observation matching, and confidence calibration. All existing unit
+  tests and prompt regression replays pass without regression.
+
 ### Version the skill and add release notes for 0.3.0
 
 - **Changed:** The skill now has its own version, starting at 0.3.0: `metadata.version` in the

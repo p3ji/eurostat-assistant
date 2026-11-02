@@ -119,9 +119,12 @@ category codes as though they were datasets.
 When the host does not render structured observations, include a compact Markdown table of the
 relevant returned rows. Prefer user-friendly columns such as geography, period, unit, indicator,
 category, value, and status/flag when present. Keep the table bounded to the rows needed to answer
-the question. In hosts that expose `publish_result` and render its structured rows, do not duplicate
-observation values in a Markdown table or transcribe values from truncated model-visible tool
-output; the published structured result is the authoritative table.
+the question. Transcribe observation values strictly verbatim from visible tool output without
+rounding, interpolating, or extrapolating missing rows. If a requested series was truncated from the
+tool output, report that the data slice was truncated rather than guessing numbers from parametric memory.
+In hosts that expose `publish_result` and render its structured rows, do not duplicate observation
+values in a Markdown table or transcribe observation values into prose; the published structured
+result is the authoritative table. Never invent, interpolate, or guess values that are not visible.
 
 When an answer uses values from multiple datasets, preserve and show one bounded table for every
 dataset used. Let the host render the source tables when it supports structured or expandable

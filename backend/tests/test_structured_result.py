@@ -1590,6 +1590,51 @@ class StructuredResultTests(unittest.TestCase):
         self.assertNotIn("<tool_call>", response["answer"])
         self.assertIn("safely interpret", response["answer"])
 
+    @patch("app.sandbox_agent.openrouter_chat")
+    def test_run_audits_ungrounded_answer_prose(self, chat_mock) -> None:
+        context_result = build_structured_result(self.fetch_record)
+        chat_mock.side_effect = [
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "id": "publish-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "publish_result",
+                                        "arguments": json.dumps({"result_ids": ["context"]}),
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": (
+                                "Germany's population was 99.9 million in 2024.\n"
+                                "<confidence>high</confidence>"
+                            ),
+                        }
+                    }
+                ]
+            },
+        ]
+
+        response = run({"query": "Check pop.", "context_result": context_result})
+
+        self.assertIsNotNone(response["result"])
+        self.assertEqual(response["confidence"], "medium")
+        warnings = response["result"].get("warnings", [])
+        self.assertTrue(any("ungrounded numerical values" in w for w in warnings))
+
 
 if __name__ == "__main__":
     unittest.main()

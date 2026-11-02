@@ -14,6 +14,7 @@ try:
         MAX_ESTIMATED_CELLS,
         MAX_EVENT_PREVIEW_CHARS,
         MAX_TOOL_CALLS,
+        MAX_TOOL_CHARS,
         MAX_TOOL_ROUNDS,
         TOOL_CALL_LIMITS,
         TOOLS,
@@ -24,6 +25,7 @@ except ImportError:  # Support direct execution by local_agent.py.
         MAX_ESTIMATED_CELLS,
         MAX_EVENT_PREVIEW_CHARS,
         MAX_TOOL_CALLS,
+        MAX_TOOL_CHARS,
         MAX_TOOL_ROUNDS,
         TOOL_CALL_LIMITS,
         TOOLS,
@@ -90,6 +92,11 @@ try:
 except ImportError:  # Support direct execution by local_agent.py.
     from agent_model import build_messages, openrouter_chat
 
+try:
+    from .agent_verification import verify_answer_grounding
+except ImportError:  # Support direct execution by local_agent.py.
+    from agent_verification import verify_answer_grounding
+
 
 CONFIDENCE_PATTERN = re.compile(
     r"\s*<confidence>\s*(low|medium|high)\s*</confidence>\s*$",
@@ -126,6 +133,7 @@ def run(
     executed_outputs: dict[str, str] = {}
     dimension_catalogs: dict[str, dict[str, dict[str, Any]]] = {}
     force_final = False
+    any_tool_truncated = False
 
     for _ in range(MAX_TOOL_ROUNDS):
         response = chat(model, messages, [] if force_final else None)
@@ -152,17 +160,24 @@ def run(
                 }
         if not tool_calls:
             answer, confidence = answer_with_confidence(message.get("content"))
+            final_result = response_result(
+                last_fetch,
+                context_result,
+                chart_choice,
+                composed_result,
+                fetch_records,
+                selected_result_id,
+            )
+            final_result, confidence = verify_answer_grounding(
+                answer,
+                final_result,
+                confidence,
+                tool_truncated=any_tool_truncated,
+            )
             return {
                 "answer": answer or "I could not complete the Eurostat request.",
                 "confidence": confidence,
-                "result": response_result(
-                    last_fetch,
-                    context_result,
-                    chart_choice,
-                    composed_result,
-                    fetch_records,
-                    selected_result_id,
-                ),
+                "result": final_result,
                 "tool_calls": tool_call_count,
                 "tool_call_details": tool_call_details,
             }
@@ -393,6 +408,8 @@ def run(
                 composed_result = None
                 chart_choice = None
                 selected_result_id = None
+            if len(tool_output) > MAX_TOOL_CHARS:
+                any_tool_truncated = True
             messages.append(
                 {
                     "role": "tool",
@@ -403,20 +420,27 @@ def run(
         if tool_call_count >= MAX_TOOL_CALLS:
             force_final = True
 
+    final_result = response_result(
+        last_fetch,
+        context_result,
+        chart_choice,
+        composed_result,
+        fetch_records,
+        selected_result_id,
+    )
+    final_result, confidence = verify_answer_grounding(
+        "",
+        final_result,
+        "low",
+        tool_truncated=any_tool_truncated,
+    )
     return {
         "answer": (
             f"I could not complete the Eurostat lookup within {MAX_TOOL_ROUNDS} "
             "model/tool rounds. Please narrow the question."
         ),
-        "confidence": "low",
-        "result": response_result(
-            last_fetch,
-            context_result,
-            chart_choice,
-            composed_result,
-            fetch_records,
-            selected_result_id,
-        ),
+        "confidence": confidence,
+        "result": final_result,
         "tool_calls": tool_call_count,
         "tool_call_details": tool_call_details,
     }
